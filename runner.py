@@ -2,14 +2,14 @@ import numpy as np
 
 class Runner(object):
 
-    def __init__(self, *, env, model, nsteps, gamma, lam):
+    def __init__(self, env, agent, nsteps, gamma, lam):
         self.env = env
-        self.model = model
+        self.agent = agent
         nenv = env.num_envs
         self.obs = np.zeros((nenv,) + env.observation_space.shape, dtype=env.observation_space.dtype.name)
         self.obs[:] = env.reset()
         self.nsteps = nsteps
-        self.states = model.initial_state
+        self.states = agent.initial_state
         self.dones = [False for _ in range(nenv)]
         self.lam = lam
         self.gamma = gamma
@@ -18,8 +18,9 @@ class Runner(object):
         mb_obs, mb_rewards, mb_actions, mb_values, mb_dones, mb_neglogpacs = [],[],[],[],[],[]
         mb_states = self.states
         epinfos = []
+        self.agent.eval()
         for idx in range(self.nsteps):
-            actions, values, self.states, neglogpacs = self.model.step(self.obs, self.states, self.dones)
+            actions, values, self.states, neglogpacs = self.agent.step(self.obs)
             mb_obs.append(self.obs.copy())
             mb_actions.append(actions)
             mb_values.append(values)
@@ -37,12 +38,12 @@ class Runner(object):
         mb_values = np.asarray(mb_values, dtype=np.float32)
         mb_neglogpacs = np.asarray(mb_neglogpacs, dtype=np.float32)
         mb_dones = np.asarray(mb_dones, dtype=np.bool)
-        last_values = self.model.value(self.obs, self.states, self.dones)
+        _, last_values, _, _ = self.agent.step(self.obs)
         #discount/bootstrap off value fn
         mb_returns = np.zeros_like(mb_rewards)
         mb_advs = np.zeros_like(mb_rewards)
 
-#        print('mb_obs = ', mb_obs.shape, '\nmb_returns = ', mb_returns.shape, '\nmb_dones = ', mb_dones.shape, '\nmb_actions = ', mb_actions.shape, '\nmb_values = ', mb_values.shape, '\nmb_neglogpacs = ', mb_neglogpacs.shape)
+#        print('mb_obs = ', mb_obs.shape, '\nmb_returns = ', mb_returns.shape, '\nmb_dones = ', mb_dones.shape, '\nmb_actions = ', mb_actions.shape, '\nmb_values = ', mb_values.shape, '\nmb_neglogpacs = ', mb_neglogpacs.shape, '\nmb_rewards = ', mb_rewards.shape)
 
         lastgaelam = 0
         for t in reversed(range(self.nsteps)):
