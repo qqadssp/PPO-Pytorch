@@ -1,7 +1,7 @@
 # PPO-Pytorch
 Minimal implementation of PPO, running in Mujoco env, using Gym-mujoco. It is based on the code [openai/baselines](https://github.com/openai/baselines).  
 
-Now it is a tensorflow version and it works, I try to convert it into Pytorch, WIP.  
+Now it is a Pytorch version and the training process also works, but I am not sure if there are some bugs in it, WIP.  
 
 # Train
 
