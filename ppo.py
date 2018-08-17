@@ -45,10 +45,8 @@ def train(agent, env, N_steps, N_updates, ent_coef, lr,
 
     for update in range(1, N_updates+1):
 
+        tstart = time.time()
         obs, returns, dones, actions, values, neglogpacs, states, epinfos = runner.run() #pylint: disable=E0632
-
-        advs = returns - values
-        advs = (advs - advs.mean()) / (advs.std() + 1e-8)
         epinfobuf.extend(epinfos)
 
         frac = 1.0 - (update - 1.0) / N_updates
@@ -59,37 +57,37 @@ def train(agent, env, N_steps, N_updates, ent_coef, lr,
         mblossnames = ['policy_loss', 'value_loss', 'entropy', 'approxkl', 'clipfrac']
         mblossvals = []
 
-#        print('obs = ', obs.shape, '\nreturns = ', returns.shape, '\ndones = ', dones.shape, '\nactions = ', actions.shape, '\nvalues = ', values.shape, '\nneglogpacs = ', neglogpacs.shape, '\nstates = ', type(states), '\nepinfos = ', len(epinfos))
-
         N_sample_steps = obs.shape[0]
         inds = np.arange(N_sample_steps)
-        tstart = time.time()
 
         agent.train()
         for _ in range(N_train_sample_epochs):
             np.random.shuffle(inds)
-            for start in range(0, batch_size, N_sample_steps):
+            for start in range(0, N_sample_steps, batch_size):
 
-#                _ = input('in:')
                 end = start + batch_size
                 mbinds = inds[start:end]
-                obs_ = torch.tensor(obs[mbinds], requires_grad=True)
-                returns_ = torch.tensor(returns[mbinds])
-                actions_ = torch.tensor(actions[mbinds])
-                values_ = torch.tensor(values[mbinds])
-                neglogpacs_ = torch.tensor(neglogpacs[mbinds])
-                advs_ = torch.tensor(advs[mbinds])
+                obs_ = torch.tensor(obs[mbinds], requires_grad=True).float()
+                returns_ = torch.tensor(returns[mbinds]).float()
+                actions_ = torch.tensor(actions[mbinds]).float()
+                values_ = torch.tensor(values[mbinds]).float()
+                neglogpacs_ = torch.tensor(neglogpacs[mbinds]).float()
+
+                advs_ = returns_ - values_
+                advs_ = (advs_ - advs_.mean()) / (advs_.std() + 1e-8)
 
                 optimazer.zero_grad()
                 neglogp, entropy, vpred = agent.statistics(obs_, actions_)
                 entropy = torch.mean(entropy)
-                vf_loss = F.mse_loss(vpred, returns_)
+                vpred_clip = values_ + torch.clamp(vpred - values_, -cliprangenow, cliprangenow)
+                vf_loss = torch.max((vpred - returns_) ** 2, (vpred_clip - returns_) ** 2)
+                vf_loss = 0.5 * torch.mean(vf_loss)
                 ratio = torch.exp(neglogpacs_ - neglogp)
-                ratio = torch.clamp(ratio, 1.0-cliprangenow, 1.0+cliprangenow)
-                pg_loss = torch.mean(- advs_ * ratio)
-                approxkl = .5 * torch.mean(pow(neglogp - neglogpacs_, 2))
-                clipfrac = torch.mean((torch.max(torch.abs(ratio - 1.0), torch.tensor(cliprangenow))).float())
-                loss = torch.mean(pg_loss - entropy * ent_coef + vf_loss * vf_coef)
+                pg_loss = torch.max(- advs_ * ratio, - advs_ * torch.clamp(ratio, 1.0-cliprangenow, 1.0+cliprangenow))
+                pg_loss = torch.mean(pg_loss)
+                approxkl = .5 * torch.mean((neglogp - neglogpacs_) ** 2)
+                clipfrac = torch.mean((torch.abs(ratio - 1.0) > torch.tensor(cliprangenow)).float())
+                loss = pg_loss - entropy * ent_coef + vf_loss * vf_coef
                 loss.backward()
                 optimazer.step()
 
@@ -118,7 +116,7 @@ def train(agent, env, N_steps, N_updates, ent_coef, lr,
             print('Saving to', savepath)
             torch.save(agent.state_dict(), savepath)
     env.close()
-    return model
+    return agent
 
 def safemean(xs):
     return np.nan if len(xs) == 0 else np.mean(xs)

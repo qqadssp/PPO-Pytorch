@@ -5,6 +5,7 @@ import argparse
 import numpy as np
 from collections import deque
 
+import torch
 import gym
 from util import logger
 from util.monitor import Monitor
@@ -26,6 +27,7 @@ def mujoco_arg_parser():
 
 def set_global_seeds(i):
 
+    torch.manual_seed(i)
     np.random.seed(i)
     random.seed(i)
 
@@ -33,17 +35,17 @@ def main():
     args = mujoco_arg_parser()
     logger.configure(dir=args.logdir)
     
-    nenv = 2
+    nenv = 1
     envs = []
     for i in range(nenv):
-        env = gym.make(args.env)
-        env.seed(args.seed)  #for recap
-        env = Monitor(env, logger.get_dir())
-        envs.append(env)
+        e = gym.make(args.env)
+        e.seed(args.seed + i)  #for repeatability
+        e = Monitor(e, logger.get_dir(), allow_early_resets=True)
+        envs.append(e)
     envs = DummyVecEnv(envs)
     envs = VecNormalize(envs)
 
-    set_global_seeds(args.seed) #for recap
+    set_global_seeds(args.seed) #for repeatability
 
     agent = MlpAgent(envs.observation_space.shape[0], envs.action_space.shape[0])
     if args.checkpoint:
@@ -58,12 +60,12 @@ def main():
 
     if args.play:
         logger.log("Running trained model")
-        obs = np.zeros((env.num_envs,) + env.observation_space.shape)
-        obs[:] = env.reset()
+        obs = np.zeros((envs.num_envs,) + envs.observation_space.shape)
+        obs[:] = envs.reset()
         while True:
             actions = agent.step(obs)[0]
-            obs[:]  = env.step(actions)[0]
-            env.render()
+            obs[:]  = envs.step(actions)[0]
+            envs.render()
 
 
 if __name__ == '__main__':

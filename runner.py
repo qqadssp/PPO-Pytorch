@@ -43,8 +43,6 @@ class Runner(object):
         mb_returns = np.zeros_like(mb_rewards)
         mb_advs = np.zeros_like(mb_rewards)
 
-#        print('mb_obs = ', mb_obs.shape, '\nmb_returns = ', mb_returns.shape, '\nmb_dones = ', mb_dones.shape, '\nmb_actions = ', mb_actions.shape, '\nmb_values = ', mb_values.shape, '\nmb_neglogpacs = ', mb_neglogpacs.shape, '\nmb_rewards = ', mb_rewards.shape)
-
         lastgaelam = 0
         for t in reversed(range(self.nsteps)):
             if t == self.nsteps - 1:
